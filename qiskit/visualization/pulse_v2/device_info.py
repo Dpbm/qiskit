@@ -41,6 +41,7 @@ from typing import Dict, List, Union, Optional
 from qiskit import pulse
 from qiskit.providers import BackendConfigurationError
 from qiskit.providers.backend import Backend
+from qiskit.providers.exceptions import BackendPropertyError
 
 
 class DrawerBackendInfo(ABC):
@@ -96,6 +97,27 @@ class DrawerBackendInfo(ABC):
 class OpenPulseBackendInfo(DrawerBackendInfo):
     """Drawing information of backend that conforms to OpenPulse specification."""
 
+    def backend_v1_adapter(self, backend):
+        name = backend.name()
+        configuration = backend.configuration()
+        defaults = backend.defaults()
+        dt = configuration.dt
+
+        return (name, configuration, dt, defaults)
+
+    def backend_v2_adapter(self, backend):
+        pass
+
+    def get_backend_data(self, backend:Backend):
+        backend_version = backend.version
+        adapters = [self.backend_v1_adapter, self.backend_v2_adapter]
+
+        if(backend_version < 1 or backend_version > 2):
+            raise BackendPropertyError('Invalid Backend version')
+
+        selected_adapter = adapters[backend_version-1]
+        return selected_adapter(backend)
+
     @classmethod
     def create_from_backend(cls, backend: Backend):
         """Initialize a class with backend information provided by provider.
@@ -106,17 +128,7 @@ class OpenPulseBackendInfo(DrawerBackendInfo):
         Returns:
             OpenPulseBackendInfo: New configured instance.
         """
-        configuration = backend.configuration()
-        defaults = backend.defaults()
-
-        # load name from different backends
-        try:
-            name = backend.name()
-        except TypeError:
-            name = configuration.backend_name
-
-        # load cycle time
-        dt = configuration.dt
+        name, configuration, dt, defaults = OpenPulseBackendInfo().get_backend_data(backend)
 
         # load frequencies
         chan_freqs = {}
